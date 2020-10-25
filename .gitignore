@@ -1,0 +1,11 @@
+/.idea
+.env
+*.log
+*.exe~
+*.exe
+tmp
+main
+main.exe
+server
+config
+logs
