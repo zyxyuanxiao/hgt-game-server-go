@@ -1,61 +1,48 @@
-package api
+package websocket
 
 import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/golang/protobuf/proto"
 	"github.com/gorilla/websocket"
 	"net/http"
 	"server/dto"
+	"server/protobuf"
 	"server/util"
 	"time"
 )
 
-type WebsocketApi struct{}
-
-type WebsocketClientManager struct {
-	clients    map[int64]*WebsocketClient
+type ClientManager struct {
+	clients    map[int64]*Client
 	broadcast  chan []byte
-	register   chan *WebsocketClient
-	unregister chan *WebsocketClient
+	register   chan *Client
+	unregister chan *Client
 }
 
-type WebsocketClient struct {
+type Client struct {
 	UserDTO       dto.UserDTO
 	socket        *websocket.Conn
-	send          chan interface{}
-	error         chan interface{}
+	Send          chan interface{}
+	Error         chan interface{}
 	InsertTime    string
-	GameGroupInfo struct {
-		Status uint8
-	}
-	RoomId string
 }
 
-var websocketManager = WebsocketClientManager{
+var websocketManager = ClientManager{
 	broadcast:  make(chan []byte),
-	register:   make(chan *WebsocketClient),
-	unregister: make(chan *WebsocketClient),
-	clients:    make(map[int64]*WebsocketClient),
+	register:   make(chan *Client),
+	unregister: make(chan *Client),
+	clients:    make(map[int64]*Client),
 }
 
-type WebsocketReadMessage struct {
+type ReadMessage struct {
 	Message string
 	Action  string
 	Args    interface{}
 }
 
-var WebsocketClientActions = make(map[string]func(*WebsocketClient, *WebsocketReadMessage))
-
-// 加载映射方法
-func LoadWebsocketActions() {
-	WebsocketClientActions["createGroup"] = (*WebsocketClient).CreateGroup
-	WebsocketClientActions["joinGroup"] = (*WebsocketClient).JoinGroup
-	WebsocketClientActions["leaveGroup"] = (*WebsocketClient).LeaveGroup
-}
-
-func (websocketApi WebsocketApi) Websocket(c *gin.Context) {
-	LoadWebsocketActions()
+// 服务
+func Server(c *gin.Context) {
 	//解析一个连接
 	conn, error := (&websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}).Upgrade(c.Writer, c.Request, nil)
 	if error != nil {
@@ -73,11 +60,11 @@ func (websocketApi WebsocketApi) Websocket(c *gin.Context) {
 	userDto := util.CheckToken(token)
 
 	//初始化一个客户端对象
-	client := &WebsocketClient{
+	client := &Client{
 		UserDTO:    userDto,
 		socket:     conn,
-		send:       make(chan interface{}),
-		error:      make(chan interface{}),
+		Send:       make(chan interface{}),
+		Error:      make(chan interface{}),
 		InsertTime: time.Now().Format("2006-01-02 15:04:05"),
 	}
 	//把这个对象发送给 管道
@@ -87,7 +74,7 @@ func (websocketApi WebsocketApi) Websocket(c *gin.Context) {
 	go client.read()
 }
 
-func (manager *WebsocketClientManager) start() {
+func (manager *ClientManager) start() {
 	for {
 		select {
 		case conn := <-manager.register: //新客户端加入
@@ -96,7 +83,7 @@ func (manager *WebsocketClientManager) start() {
 			fmt.Println("当前总用户数量register：", len(manager.clients))
 		case conn := <-manager.unregister: // 离开
 			if _, ok := manager.clients[conn.UserDTO.UserId]; ok {
-				close(conn.send)
+				close(conn.Send)
 				delete(manager.clients, conn.UserDTO.UserId)
 				fmt.Println("用户离开：" + conn.UserDTO.Username)
 				fmt.Println("当前总用户数量unregister：", len(manager.clients))
@@ -105,11 +92,11 @@ func (manager *WebsocketClientManager) start() {
 			fmt.Println("当前总用户数量broadcast：", len(manager.clients))
 			for _, conn := range manager.clients {
 				select {
-				case conn.send <- message: //调用发送给全体客户端
+				case conn.Send <- message: //调用发送给全体客户端
 				default:
 					// 重新上来之后挤掉了 @todo
 					// 关闭连接
-					close(conn.send)
+					close(conn.Send)
 					delete(manager.clients, conn.UserDTO.UserId)
 				}
 			}
@@ -118,16 +105,16 @@ func (manager *WebsocketClientManager) start() {
 }
 
 // 广播数据 除了自己
-func (manager *WebsocketClientManager) send(message []byte, ignore *WebsocketClient) {
+func (manager *ClientManager) send(message []byte, ignore *Client) {
 	for _, conn := range manager.clients {
 		if conn != ignore {
-			conn.send <- message //发送的数据写入所有的 websocket 连接 管道
+			conn.Send <- message //发送的数据写入所有的 websocket 连接 管道
 		}
 	}
 }
 
 // 写入管道后激活这个进程
-func (c *WebsocketClient) write() {
+func (c *Client) write() {
 	defer func() {
 		// 程序退出 关闭链接
 		websocketManager.unregister <- c
@@ -136,7 +123,7 @@ func (c *WebsocketClient) write() {
 
 	for {
 		select {
-		case data, ok := <-c.send: //这个管道有了数据 写这个消息出去
+		case data, ok := <-c.Send: //这个管道有了数据 写这个消息出去
 			if !ok {
 				// 发送关闭提示
 				c.socket.WriteMessage(websocket.CloseMessage, []byte{})
@@ -152,7 +139,7 @@ func (c *WebsocketClient) write() {
 				// 程序退出 关闭链接
 				return
 			}
-		case message, ok := <-c.error: // 这个是有错误信息
+		case message, ok := <-c.Error: // 这个是有错误信息
 			if !ok {
 				// 发送关闭提示
 				c.socket.WriteMessage(websocket.CloseMessage, []byte{})
@@ -173,7 +160,7 @@ func (c *WebsocketClient) write() {
 }
 
 // 客户端发送数据处理逻辑
-func (c *WebsocketClient) read() {
+func (c *Client) read() {
 	defer func() {
 		websocketManager.unregister <- c
 		c.socket.Close()
@@ -187,14 +174,25 @@ func (c *WebsocketClient) read() {
 			fmt.Println("read 关闭")
 			return
 		}
-		var websocketReadMessage *WebsocketReadMessage
-		json.Unmarshal(message, &websocketReadMessage)
-		if _, ok := WebsocketClientActions[websocketReadMessage.Action]; !ok {
-			c.send <- []byte("请求错误")
+		messageStruct := &protobuf.Message{}
+		// proto解码
+		proto.Unmarshal(message, messageStruct)
+		// 找到对应的协议操作
+		//fmt.Println(newGameMessage.Data)
+		//buf := bytes.NewBuffer(newGameMessage.Data)
+		//binary.Read(buf, binary.BigEndian, &newTestMessage)
+		//newTestMessage = *(**protobuf.Test)(unsafe.Pointer(&newGameMessage.Data))
+		//ptypes.UnmarshalAny(newGameMessage.Data, newTestMessage)
+		var websocketReadMessage *ReadMessage
+		//json.Unmarshal(message, &websocketReadMessage)
+		if _, ok := ProtocolActions[messageStruct.Protocol]; !ok {
+			c.Send <- []byte("请求错误")
 		} else {
-			websocketReadMessage.Message = string(message[:])
-			handleFun, _ := WebsocketClientActions[websocketReadMessage.Action]
-			handleFun(c, websocketReadMessage)
+			//websocketReadMessage.Message = string(message[:])
+			dataMessage := ProtocolStruct[messageStruct.Protocol]
+			proto.Unmarshal(messageStruct.Data, dataMessage)
+			handleFun, _ := ProtocolActions[messageStruct.Protocol]
+			handleFun(dataMessage, c, websocketReadMessage)
 		}
 		//激活start 程序 入广播管道
 		//websocketManager.broadcast <- message

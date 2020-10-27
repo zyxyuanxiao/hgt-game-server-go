@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket</title>
+</head>
+
+<body>
+    <h1>Echo Test</h1>
+    <input type="text" style="width: 80%;" id="sendTxt" value='{"action": "createGroup","args": {"number": 1}}'>
+    <button id="sendBtn">发送</button>
+    <div id="recv"></div>
+    <script src="protobuf.js"></script>
+    <script type="text/javascript">
+        var messageb;
+        var TestA
+        var messageCreate;
+        var buffer;
+        var roomReqCreate
+        var roomReq
+        protobuf.load("protos/protobuf/GameMessage.proto", function (err, root) {
+            if (err) throw err;
+            const messageb = root.lookupType("GameMessage.Message");
+            const TestA = root.lookupType("GameMessage.TestA");
+            // const Any = root.lookupType('google.protobuf.Any');
+
+            var testdata = TestA.fromObject({passWord: "passssss", userName: "namneddd" })
+            // messageCreate = messageb.fromObject({ protocol: 11, code: 123, data: TestA.encode(testdata).finish() });
+            messageCreate = messageb.fromObject({ protocol: 11, code: 123, data: TestA.encode(testdata).finish() });
+
+            console.log(messageCreate)
+            buffer = messageb.encode(messageCreate).finish();
+        });
+        // var websocket = new WebSocket("ws://111.230.34.248:9503/wss");
+        // var websocket = new WebSocket("wss://api.sunanzhi.com/wss");
+        var websocket = new WebSocket("ws://localhost:8899/wss?Authorization=42c217ce-3278-47bc-affa-d074516c1692");
+        websocket.onopen = function () {
+            console.log("websocket open");
+            document.getElementById("recv").innerHTML = "Connected";
+        }
+        websocket.inclose = function () {
+            console.log('websocket close');
+        }
+        websocket.onmessage = function (e) {
+            console.log(e.data);
+            document.getElementById("recv").innerHTML = e.data;
+        }
+        document.getElementById("sendBtn").onclick = function () {
+            var txt = document.getElementById("sendTxt").value;
+            websocket.send(buffer);
+        }
+
+    </script>
+</body>
+
+</html>

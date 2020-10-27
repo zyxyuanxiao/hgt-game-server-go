@@ -2,10 +2,9 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"server/api"
+	"server/websocket"
 )
-var websocketApi = api.WebsocketApi{}
 
 func Websocket(g *gin.Engine) {
-	g.GET("/wss", websocketApi.Websocket)
+	g.GET("/wss", websocket.Server)
 }

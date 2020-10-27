@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket</title>
+</head>
+<body>
+    <h1>Echo Test</h1>
+    <input type="text" id="sendTxt">
+    <input type="text" id="action" value="createGroup">
+    <button id="sendBtn">发送</button>
+    <div id="recv"></div>
+    <!-- <script src="//cdn.rawgit.com/dcodeIO/protobuf.js/6.8.2/dist/protobuf.js"></script> -->
+    <script type="text/javascript">
+        // var websocket = new WebSocket("ws://111.230.34.248:9503/wss");
+        // var websocket = new WebSocket("wss://api.sunanzhi.com/wss");
+        var websocket = new WebSocket("ws://localhost:8899/wss?Authorization=e56dbf77-689f-4212-bb43-e01ce9f874cd");
+        websocket.onopen = function(){
+            console.log("websocket open");
+            document.getElementById("recv").innerHTML = "Connected";
+        }
+        websocket.inclose = function(){
+            console.log('websocket close');
+        }
+        websocket.onmessage = function(e){
+            console.log(e.data);
+            document.getElementById("recv").innerHTML = e.data;
+        }
+        document.getElementById("sendBtn").onclick = function(){
+            var txt = document.getElementById("sendTxt").value;
+            var action = document.getElementById("action").value;
+            websocket.send('{"action": "'+action+'","args": {"number": '+txt+'}}');
+        }
+
+    </script>
+</body>
+</html>

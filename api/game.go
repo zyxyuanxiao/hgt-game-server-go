@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"server/websocket"
 )
 
 type GameApi struct{}
@@ -14,7 +14,7 @@ type GameStartMessage struct {
 	}
 }
 // 游戏开局
-func (c *WebsocketClient) GameStart(message *WebsocketReadMessage) {
+func GameStart(c *websocket.Client, message *websocket.ReadMessage) {
 	var args *GameStartMessage
 	json.Unmarshal([]byte(message.Message), &args)
 }
@@ -25,20 +25,20 @@ type GamePrepareMessage struct {
 	}
 }
 // 游戏准备
-func (c *WebsocketClient) GamePrepare(message WebsocketReadMessage) {
+func GamePrepare(c *websocket.Client, message websocket.ReadMessage) {
 	var args *GamePrepareMessage
 	json.Unmarshal([]byte(message.Message), &args)
 	// 找房间
 	if room, ok := GroupManage[args.Args.RoomId]; ok {
 		if room.Status != 0 {
-			c.send <- []byte("当前游戏已经不能准备")
+			c.Send <- []byte("当前游戏已经不能准备")
 			return
 		}
-		c.GameGroupInfo.Status = 1
+		//c.GameGroupInfo.Status = 1
 		room.WebsocketClient[c.UserDTO.UserId] = *c
-		fmt.Println(room.WebsocketClient[c.UserDTO.UserId].GameGroupInfo.Status)
-		c.send <- []byte("已经准备")
+		//fmt.Println(room.WebsocketClient[c.UserDTO.UserId].GameGroupInfo.Status)
+		c.Send <- []byte("已经准备")
 	} else {
-		c.send <- []byte("没有找到房间")
+		c.Send <- []byte("没有找到房间")
 	}
 }
