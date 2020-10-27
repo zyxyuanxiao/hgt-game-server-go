@@ -192,7 +192,7 @@ func (c *Client) read() {
 			dataMessage := ProtocolStruct[messageStruct.Protocol]
 			proto.Unmarshal(messageStruct.Data, dataMessage)
 			handleFun, _ := ProtocolActions[messageStruct.Protocol]
-			handleFun(dataMessage, c, websocketReadMessage)
+			handleFun(&dataMessage, c, websocketReadMessage)
 		}
 		//激活start 程序 入广播管道
 		//websocketManager.broadcast <- message

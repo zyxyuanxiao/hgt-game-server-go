@@ -7,11 +7,6 @@ import (
 	"server/protobuf/soup"
 )
 
-type GameRoom struct {
-	soup.CreateRoomReq
-	soup.CreateRoomRes
-}
-
 type GroupInfo struct {
 	RoomId          string
 	Password        string
@@ -32,8 +27,13 @@ type CreateGroupMessage struct {
 		Password string
 	}
 }
+
+type CreateRoomReq struct {
+	*soup.CreateRoomReq
+}
+
 // 创房组
-func (room *GameRoom) CreateGroup(c *Client, message *ReadMessage) {
+func (room *CreateRoomReq) CreateGroup(c *Client, message *ReadMessage) {
 	var args *CreateGroupMessage
 	json.Unmarshal([]byte(message.Message), &args)
 	roomId := app.RandStr(8)
@@ -64,7 +64,7 @@ type JoinGroupMessage struct {
 	}
 }
 // 加入房间组
-func (room *GameRoom) JoinGroup(c *Client, message *ReadMessage) {
+func JoinGroup(c *Client, message *ReadMessage) {
 	var args *JoinGroupMessage
 	json.Unmarshal([]byte(message.Message), &args)
 	// 找房间
